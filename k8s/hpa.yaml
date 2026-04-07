@@ -1,0 +1,2 @@
+# Define HorizontalPodAutoscaler for all 4 microservices here.
+# Scale based on CPU and memory. Min replicas: 1, Max replicas: 5.
