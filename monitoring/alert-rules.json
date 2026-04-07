@@ -1,0 +1,177 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "resourceGroupName": {
+      "type": "string",
+      "defaultValue": "devops-rg"
+    },
+    "aksClusterName": {
+      "type": "string",
+      "defaultValue": "my-aks-cluster"
+    },
+    "actionGroupEmail": {
+      "type": "string",
+      "defaultValue": "devops-alerts@yourcompany.com"
+    }
+  },
+  "resources": [
+    {
+      "type": "microsoft.insights/actionGroups",
+      "apiVersion": "2022-04-01",
+      "name": "devops-alert-action-group",
+      "location": "global",
+      "properties": {
+        "groupShortName": "DevOpsAlerts",
+        "enabled": true,
+        "emailReceivers": [
+          {
+            "name": "DevOps Team",
+            "emailAddress": "[parameters('actionGroupEmail')]",
+            "useCommonAlertSchema": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "microsoft.insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "aks-high-cpu-alert",
+      "location": "global",
+      "properties": {
+        "description": "Alert when AKS node CPU exceeds 80%",
+        "severity": 2,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.ContainerService/managedClusters', parameters('aksClusterName'))]"
+        ],
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "High CPU",
+              "metricName": "node_cpu_usage_percentage",
+              "metricNamespace": "Microsoft.ContainerService/managedClusters",
+              "operator": "GreaterThan",
+              "threshold": 80,
+              "timeAggregation": "Average"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('microsoft.insights/actionGroups', 'devops-alert-action-group')]"
+          }
+        ]
+      },
+      "dependsOn": ["devops-alert-action-group"]
+    },
+    {
+      "type": "microsoft.insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "aks-high-memory-alert",
+      "location": "global",
+      "properties": {
+        "description": "Alert when AKS node memory exceeds 85%",
+        "severity": 2,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.ContainerService/managedClusters', parameters('aksClusterName'))]"
+        ],
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "High Memory",
+              "metricName": "node_memory_working_set_percentage",
+              "metricNamespace": "Microsoft.ContainerService/managedClusters",
+              "operator": "GreaterThan",
+              "threshold": 85,
+              "timeAggregation": "Average"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('microsoft.insights/actionGroups', 'devops-alert-action-group')]"
+          }
+        ]
+      },
+      "dependsOn": ["devops-alert-action-group"]
+    },
+    {
+      "type": "microsoft.insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "aks-pod-restart-alert",
+      "location": "global",
+      "properties": {
+        "description": "Alert when pods are restarting frequently (crash loop)",
+        "severity": 1,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.ContainerService/managedClusters', parameters('aksClusterName'))]"
+        ],
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "Pod Restarts",
+              "metricName": "kube_pod_container_status_restarts_total",
+              "metricNamespace": "Microsoft.ContainerService/managedClusters",
+              "operator": "GreaterThan",
+              "threshold": 5,
+              "timeAggregation": "Total"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('microsoft.insights/actionGroups', 'devops-alert-action-group')]"
+          }
+        ]
+      },
+      "dependsOn": ["devops-alert-action-group"]
+    },
+    {
+      "type": "microsoft.insights/metricAlerts",
+      "apiVersion": "2018-03-01",
+      "name": "aks-node-not-ready-alert",
+      "location": "global",
+      "properties": {
+        "description": "Alert when AKS node is not ready",
+        "severity": 0,
+        "enabled": true,
+        "scopes": [
+          "[resourceId('Microsoft.ContainerService/managedClusters', parameters('aksClusterName'))]"
+        ],
+        "evaluationFrequency": "PT1M",
+        "windowSize": "PT5M",
+        "criteria": {
+          "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+          "allOf": [
+            {
+              "name": "Node Not Ready",
+              "metricName": "kube_node_status_condition",
+              "metricNamespace": "Microsoft.ContainerService/managedClusters",
+              "operator": "GreaterThan",
+              "threshold": 0,
+              "timeAggregation": "Average"
+            }
+          ]
+        },
+        "actions": [
+          {
+            "actionGroupId": "[resourceId('microsoft.insights/actionGroups', 'devops-alert-action-group')]"
+          }
+        ]
+      },
+      "dependsOn": ["devops-alert-action-group"]
+    }
+  ]
+}
