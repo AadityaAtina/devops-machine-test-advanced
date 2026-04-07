@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Azure Microservices App</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; }
+    .card { background: #f5f5f5; border-radius: 8px; padding: 20px; margin: 15px 0; }
+    .status { padding: 8px 12px; border-radius: 4px; display: inline-block; margin: 5px 0; }
+    .ok { background: #d4edda; color: #155724; }
+    .error { background: #f8d7da; color: #721c24; }
+    button { background: #0078d4; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+    button:hover { background: #005a9e; }
+    input { padding: 8px; margin: 5px; border: 1px solid #ccc; border-radius: 4px; width: 200px; }
+  </style>
+</head>
+<body>
+  <h1>Azure Microservices App</h1>
+  <p>Frontend UI for testing all microservices via Ingress routing.</p>
+
+  <div class="card">
+    <h2>Service Health</h2>
+    <div id="health-status">Checking services...</div>
+    <button onclick="checkHealth()">Check All Services</button>
+  </div>
+
+  <div class="card">
+    <h2>Auth Service</h2>
+    <input id="username" placeholder="Username" />
+    <input id="password" type="password" placeholder="Password" /><br/>
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <div id="auth-result"></div>
+  </div>
+
+  <div class="card">
+    <h2>Order Service</h2>
+    <input id="item" placeholder="Item name" />
+    <input id="quantity" placeholder="Quantity" type="number" />
+    <input id="price" placeholder="Price" type="number" /><br/>
+    <button onclick="createOrder()">Create Order</button>
+    <button onclick="listOrders()">List Orders</button>
+    <div id="order-result"></div>
+  </div>
+
+  <script>
+    const AUTH_URL = window.AUTH_URL || '/auth';
+    const ORDER_URL = window.ORDER_URL || '/orders';
+    const PAYMENT_URL = window.PAYMENT_URL || '/payments';
+    let token = localStorage.getItem('token') || '';
+
+    async function checkHealth() {
+      const services = [
+        { name: 'auth-service', url: `${AUTH_URL}/health` },
+        { name: 'order-service', url: `${ORDER_URL}/health` },
+        { name: 'payment-service', url: `${PAYMENT_URL}/health` }
+      ];
+      const el = document.getElementById('health-status');
+      el.innerHTML = '';
+      for (const svc of services) {
+        try {
+          const res = await fetch(svc.url);
+          const data = await res.json();
+          el.innerHTML += `<div class="status ok">${svc.name}: ${data.status}</div>`;
+        } catch {
+          el.innerHTML += `<div class="status error">${svc.name}: unreachable</div>`;
+        }
+      }
+    }
+
+    async function register() {
+      const res = await fetch(`${AUTH_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value })
+      });
+      const data = await res.json();
+      document.getElementById('auth-result').innerHTML = `<div class="status ${res.ok ? 'ok' : 'error'}">${JSON.stringify(data)}</div>`;
+    }
+
+    async function login() {
+      const res = await fetch(`${AUTH_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value })
+      });
+      const data = await res.json();
+      if (data.token) { token = `Bearer ${data.token}`; localStorage.setItem('token', token); }
+      document.getElementById('auth-result').innerHTML = `<div class="status ${res.ok ? 'ok' : 'error'}">${res.ok ? 'Logged in!' : JSON.stringify(data)}</div>`;
+    }
+
+    async function createOrder() {
+      const res = await fetch(`${ORDER_URL}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': token },
+        body: JSON.stringify({ item: document.getElementById('item').value, quantity: document.getElementById('quantity').value, price: document.getElementById('price').value })
+      });
+      const data = await res.json();
+      document.getElementById('order-result').innerHTML = `<div class="status ${res.ok ? 'ok' : 'error'}">${JSON.stringify(data)}</div>`;
+    }
+
+    async function listOrders() {
+      const res = await fetch(`${ORDER_URL}/orders`, { headers: { 'Authorization': token } });
+      const data = await res.json();
+      document.getElementById('order-result').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+    }
+
+    checkHealth();
+  </script>
+</body>
+</html>
