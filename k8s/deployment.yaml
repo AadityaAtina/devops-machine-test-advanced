@@ -1,0 +1,2 @@
+# Define Kubernetes Deployments for all 4 microservices here.
+# Each deployment must include readiness and liveness probes.
