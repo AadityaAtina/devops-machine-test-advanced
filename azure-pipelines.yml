@@ -1,0 +1,134 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  acrName: 'mydevopsacr'
+  acrLoginServer: '$(acrName).azurecr.io'
+  aksCluster: 'my-aks-cluster'
+  aksResourceGroup: 'devops-rg'
+  imageTag: '$(Build.BuildId)'
+
+stages:
+
+# ─── STAGE 1: BUILD & PUSH DOCKER IMAGES ────────────────────────────────────
+- stage: Build
+  displayName: 'Build & Push Images to ACR'
+  jobs:
+  - job: BuildPush
+    displayName: 'Docker Build & Push'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+
+    - task: AzureCLI@2
+      displayName: 'Login to ACR'
+      inputs:
+        azureSubscription: 'AzureServiceConnection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az acr login --name $(acrName)
+
+    - script: |
+        docker build -t $(acrLoginServer)/auth-service:$(imageTag) ./services/auth-service
+        docker push $(acrLoginServer)/auth-service:$(imageTag)
+      displayName: 'Build & Push auth-service'
+
+    - script: |
+        docker build -t $(acrLoginServer)/order-service:$(imageTag) ./services/order-service
+        docker push $(acrLoginServer)/order-service:$(imageTag)
+      displayName: 'Build & Push order-service'
+
+    - script: |
+        docker build -t $(acrLoginServer)/payment-service:$(imageTag) ./services/payment-service
+        docker push $(acrLoginServer)/payment-service:$(imageTag)
+      displayName: 'Build & Push payment-service'
+
+    - script: |
+        docker build -t $(acrLoginServer)/frontend:$(imageTag) ./services/frontend
+        docker push $(acrLoginServer)/frontend:$(imageTag)
+      displayName: 'Build & Push frontend'
+
+# ─── STAGE 2: DEPLOY TO AKS ──────────────────────────────────────────────────
+- stage: Deploy
+  displayName: 'Deploy to AKS'
+  dependsOn: Build
+  jobs:
+  - deployment: DeployAKS
+    displayName: 'Deploy Microservices to AKS'
+    pool:
+      vmImage: 'ubuntu-latest'
+    environment: 'production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+          - task: AzureCLI@2
+            displayName: 'Get AKS Credentials'
+            inputs:
+              azureSubscription: 'AzureServiceConnection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az aks get-credentials \
+                  --resource-group $(aksResourceGroup) \
+                  --name $(aksCluster) --overwrite-existing
+
+          - task: KubernetesManifest@0
+            displayName: 'Apply Namespace'
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'AKSServiceConnection'
+              manifests: 'k8s/namespace.yaml'
+
+          - task: KubernetesManifest@0
+            displayName: 'Apply Secrets'
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'AKSServiceConnection'
+              manifests: 'k8s/secrets.yaml'
+
+          - task: KubernetesManifest@0
+            displayName: 'Deploy All Services'
+            inputs:
+              action: 'deploy'
+              kubernetesServiceConnection: 'AKSServiceConnection'
+              manifests: |
+                k8s/deployment.yaml
+                k8s/service.yaml
+                k8s/ingress.yaml
+                k8s/hpa.yaml
+              containers: |
+                $(acrLoginServer)/auth-service:$(imageTag)
+                $(acrLoginServer)/order-service:$(imageTag)
+                $(acrLoginServer)/payment-service:$(imageTag)
+                $(acrLoginServer)/frontend:$(imageTag)
+
+# ─── STAGE 3: SMOKE TEST ─────────────────────────────────────────────────────
+- stage: SmokeTest
+  displayName: 'Smoke Test'
+  dependsOn: Deploy
+  jobs:
+  - job: HealthCheck
+    displayName: 'Run Health Checks'
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Check Service Health'
+      inputs:
+        azureSubscription: 'AzureServiceConnection'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az aks get-credentials \
+            --resource-group $(aksResourceGroup) \
+            --name $(aksCluster) --overwrite-existing
+          kubectl get pods -n microservices
+          kubectl rollout status deployment/auth-service -n microservices --timeout=120s
+          kubectl rollout status deployment/order-service -n microservices --timeout=120s
+          kubectl rollout status deployment/payment-service -n microservices --timeout=120s
+          kubectl rollout status deployment/frontend -n microservices --timeout=120s
