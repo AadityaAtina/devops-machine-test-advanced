@@ -1,0 +1,2 @@
+# Define the single Ingress with path-based routing for all services here.
+# Routes: /auth/* -> auth-service, /orders/* -> order-service, /payments/* -> payment-service, / -> frontend
